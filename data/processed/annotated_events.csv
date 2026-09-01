@@ -1,0 +1,6 @@
+event_id,start,end,start_idx,end_idx,description
+WinterStorm,2023-01-12,2023-01-15,1054,1343,"Winter storm – turbidity spike >100 FNU, conductance drop"
+SpringSnowmelt,2023-03-10,2023-03-18,6521,7286,"Spring snowmelt – sustained turbidity elevation, pH shift"
+SummerLowFlow,2023-07-20,2023-07-30,18845,19806,"Summer low-flow – DO depression, conductance elevation"
+TropicalStorm,2023-09-01,2023-09-07,22967,23544,"Tropical remnants – turbidity surge, pH fluctuation"
+SensorGap,2023-05-15,2023-05-20,12846,13327,Instrument gap / suspect data – multiple sensors NaN

@@ -1,0 +1,6 @@
+event_id,description,detector,TP,FP,FN,precision,recall,F1,tta_minutes
+WinterStorm,"Winter storm – turbidity spike >100 FNU, conductance drop",RollingZScore,47,5452,242,0.0085,0.1626,0.0162,1170
+SpringSnowmelt,"Spring snowmelt – sustained turbidity elevation, pH shift",RollingZScore,47,5452,718,0.0085,0.0614,0.015,15
+SummerLowFlow,"Summer low-flow – DO depression, conductance elevation",RollingZScore,178,5321,783,0.0324,0.1852,0.0551,1860
+TropicalStorm,"Tropical remnants – turbidity surge, pH fluctuation",RollingZScore,42,5457,535,0.0076,0.0728,0.0138,0
+SensorGap,Instrument gap / suspect data – multiple sensors NaN,RollingZScore,17,5482,464,0.0031,0.0353,0.0057,180
