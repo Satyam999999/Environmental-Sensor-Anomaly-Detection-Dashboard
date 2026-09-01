@@ -1,0 +1,18 @@
+{
+  "source": "USGS National Water Information System (NWIS)",
+  "station_id": "01645704",
+  "station_name": "Potomac River at Chain Bridge, DC",
+  "api_url": "https://waterservices.usgs.gov/nwis/iv/",
+  "license": "U.S. Public Domain \u2013 no copyright restriction",
+  "license_url": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+  "parameters": {
+    "00095": "specific_conductance_uScm",
+    "00300": "dissolved_oxygen_mgL",
+    "00400": "pH",
+    "63680": "turbidity_FNU"
+  },
+  "period": "2023-01-01 to 2023-12-31",
+  "interval": "15 minutes (instantaneous values)",
+  "downloaded_at": "2026-09-01T05:05:54.423405Z",
+  "rows": 34677
+}
