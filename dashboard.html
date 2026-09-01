@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Environmental Sensor Anomaly Detection Dashboard — Potomac River 2023</title>
+<meta name="description" content="Real-time water quality anomaly detection dashboard for USGS Potomac River sensor data (2023). Tracks turbidity, pH, specific conductance, and dissolved oxygen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --bg-primary:    #0a0e1a;
+    --bg-secondary:  #111827;
+    --bg-card:       #1a2236;
+    --bg-card-hover: #1f2a42;
+    --border:        #2d3a52;
+    --accent-1:      #e74c3c;  /* turbidity / red */
+    --accent-2:      #2ecc71;  /* pH / green */
+    --accent-3:      #3498db;  /* conductance / blue */
+    --accent-4:      #9b59b6;  /* DO / purple */
+    --accent-warn:   #f39c12;
+    --text-primary:  #e2e8f0;
+    --text-secondary:#94a3b8;
+    --text-muted:    #64748b;
+    --glow-red:      rgba(231,76,60,0.25);
+    --glow-blue:     rgba(52,152,219,0.25);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated gradient bg */
+  body::before {
+    content:'';
+    position:fixed; top:0; left:0; right:0; height:300px;
+    background: linear-gradient(135deg, rgba(52,152,219,0.08) 0%, rgba(231,76,60,0.06) 50%, rgba(155,89,182,0.05) 100%);
+    pointer-events:none; z-index:0;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header {
+    position: relative; z-index:1;
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(17,24,39,0.8);
+    backdrop-filter: blur(12px);
+  }
+  .header-top { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  .site-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    background: rgba(52,152,219,0.15); border:1px solid rgba(52,152,219,0.3);
+    border-radius:20px; padding:4px 12px; font-size:11px; color:var(--accent-3);
+  }
+  .site-badge::before {
+    content:''; width:8px; height:8px; border-radius:50%;
+    background:var(--accent-3); animation:pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  h1 { font-size:22px; font-weight:700; letter-spacing:-0.3px; margin-bottom:4px; }
+  .subtitle { font-size:13px; color:var(--text-secondary); }
+  .subtitle a { color:var(--accent-3); text-decoration:none; }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .main { padding:24px 32px; position:relative; z-index:1; max-width:1800px; }
+
+  /* ── KPI Cards ───────────────────────────────────────── */
+  .kpi-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap:16px; margin-bottom:28px;
+  }
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius:14px;
+    padding:20px 22px;
+    transition: all 0.25s ease;
+    cursor: default;
+  }
+  .kpi-card:hover { background:var(--bg-card-hover); transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,0,0,0.3); }
+  .kpi-label { font-size:11px; font-weight:500; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+  .kpi-value { font-size:32px; font-weight:700; line-height:1; margin-bottom:4px; }
+  .kpi-sub { font-size:11px; color:var(--text-secondary); }
+  .kpi-bar { height:3px; border-radius:2px; margin-top:12px; }
+
+  /* ── Event Filter Tabs ───────────────────────────────── */
+  .filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; align-items:center; }
+  .filter-label { font-size:12px; color:var(--text-muted); margin-right:4px; }
+  .event-chip {
+    padding:5px 12px; border-radius:20px; font-size:11px; font-weight:500;
+    border:1px solid var(--border); background:transparent; color:var(--text-secondary);
+    cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  }
+  .event-chip:hover, .event-chip.active {
+    background:var(--bg-card); color:var(--text-primary); border-color:var(--accent-3);
+    box-shadow: 0 0 12px rgba(52,152,219,0.2);
+  }
+
+  /* ── Chart Grid ──────────────────────────────────────── */
+  .chart-grid {
+    display:grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap:20px; margin-bottom:28px;
+  }
+  @media(max-width:1100px){ .chart-grid{ grid-template-columns:1fr; } }
+
+  .chart-card {
+    background:var(--bg-card);
+    border:1px solid var(--border);
+    border-radius:14px; padding:20px 22px;
+    transition: box-shadow 0.25s;
+  }
+  .chart-card:hover { box-shadow:0 4px 24px rgba(0,0,0,0.25); }
+  .chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .chart-title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .chart-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .chart-stat { font-size:11px; color:var(--text-muted); font-family:'JetBrains Mono', monospace; }
+  .chart-canvas-wrap { position:relative; height:200px; }
+
+  /* ── Bottom row – anomaly table ──────────────────────── */
+  .bottom-grid { display:grid; grid-template-columns:1fr 400px; gap:20px; }
+  @media(max-width:1100px){ .bottom-grid{ grid-template-columns:1fr; } }
+
+  .section-title {
+    font-size:13px; font-weight:600; color:var(--text-secondary);
+    text-transform:uppercase; letter-spacing:0.8px;
+    margin-bottom:14px; display:flex; align-items:center; gap:8px;
+  }
+  .section-title::before {
+    content:''; flex:1; height:1px; background:var(--border);
+    max-width:30px;
+  }
+
+  /* Table */
+  .anomaly-table-wrap {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:14px; overflow:hidden;
+  }
+  .anomaly-table-header { padding:16px 20px; border-bottom:1px solid var(--border); }
+  .anomaly-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .anomaly-table th {
+    padding:10px 14px; text-align:left;
+    background:rgba(45,58,82,0.5); color:var(--text-muted);
+    font-weight:500; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;
+  }
+  .anomaly-table td { padding:9px 14px; border-top:1px solid rgba(45,58,82,0.4); }
+  .anomaly-table tr:hover td { background:rgba(52,152,219,0.05); }
+  .badge {
+    display:inline-block; padding:2px 8px; border-radius:4px;
+    font-size:10px; font-weight:600; text-transform:uppercase;
+  }
+  .badge-red    { background:rgba(231,76,60,0.2);  color:var(--accent-1); }
+  .badge-orange { background:rgba(243,156,18,0.2); color:var(--accent-warn); }
+  .badge-grey   { background:rgba(100,116,139,0.2);color:var(--text-muted); }
+  .badge-blue   { background:rgba(52,152,219,0.2); color:var(--accent-3); }
+  .badge-purple { background:rgba(155,89,182,0.2); color:var(--accent-4); }
+  .z-val { font-family:'JetBrains Mono',monospace; font-size:11px; }
+  .z-high { color:var(--accent-1); }
+  .z-med  { color:var(--accent-warn); }
+
+  /* Maintenance log */
+  .maint-card {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:14px; padding:20px;
+  }
+  .maint-item {
+    padding:12px 0; border-bottom:1px solid rgba(45,58,82,0.4);
+    display:flex; gap:12px; align-items:flex-start;
+  }
+  .maint-item:last-child { border-bottom:none; }
+  .maint-icon {
+    width:32px; height:32px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; flex-shrink:0; margin-top:1px;
+  }
+  .maint-info { flex:1; }
+  .maint-date { font-size:10px; color:var(--text-muted); margin-bottom:2px; font-family:'JetBrains Mono',monospace; }
+  .maint-text { font-size:12px; line-height:1.5; color:var(--text-primary); }
+
+  /* ── Footer ──────────────────────────────────────────── */
+  footer {
+    border-top:1px solid var(--border); padding:16px 32px;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; color:var(--text-muted); flex-wrap:wrap; gap:8px;
+  }
+  footer a { color:var(--accent-3); text-decoration:none; }
+
+  /* Loading overlay */
+  #loading {
+    position:fixed; inset:0; background:var(--bg-primary);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:999; gap:16px;
+  }
+  .spinner {
+    width:48px; height:48px; border:3px solid var(--border);
+    border-top-color:var(--accent-3); border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .load-text { font-size:14px; color:var(--text-secondary); }
+
+  .tag { display:inline-block; font-size:10px; padding:1px 6px; border-radius:3px;
+         background:rgba(46,204,113,0.15); color:var(--accent-2); margin-left:4px; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="load-text">Loading sensor data…</div>
+</div>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+        <span class="site-badge">LIVE DATA · USGS 01645704</span>
+        <span style="font-size:11px;color:var(--text-muted);">2023-01-01 → 2023-12-31</span>
+      </div>
+      <h1>🌊 Environmental Sensor Anomaly Detection Dashboard</h1>
+      <p class="subtitle">
+        Potomac River at Chain Bridge, DC &nbsp;·&nbsp;
+        <a href="https://waterservices.usgs.gov/nwis/iv/?sites=01645704" target="_blank" rel="noopener">USGS NWIS API</a>
+        &nbsp;·&nbsp; U.S. Public Domain Data &nbsp;·&nbsp;
+        Rolling Z-Score Anomaly Detection
+      </p>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:var(--text-muted);">Anomaly detector</div>
+      <div style="font-size:18px;font-weight:700;color:var(--accent-3);">Z-Score |z| &gt; 3σ</div>
+      <div style="font-size:11px;color:var(--text-muted);">24-h rolling window</div>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" id="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Readings</div>
+      <div class="kpi-value" id="kpi-total" style="color:var(--accent-3)">—</div>
+      <div class="kpi-sub">15-min intervals, full year</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-3),transparent)"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">% Readings Flagged</div>
+      <div class="kpi-value" id="kpi-pct" style="color:var(--accent-1)">—</div>
+      <div class="kpi-sub">Z-Score anomaly detector</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-1),transparent)"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Avg Time-to-Alarm</div>
+      <div class="kpi-value" id="kpi-tta" style="color:var(--accent-warn)">645</div>
+      <div class="kpi-sub" id="kpi-tta-sub">min (~10.8 h avg across events)</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-warn),transparent)"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Turbidity Peak</div>
+      <div class="kpi-value" id="kpi-turb-peak" style="color:var(--accent-1)">—</div>
+      <div class="kpi-sub">FNU — annual maximum</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-1),transparent)"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">pH Range</div>
+      <div class="kpi-value" id="kpi-ph-range" style="color:var(--accent-2)">—</div>
+      <div class="kpi-sub">min → max observed</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-2),transparent)"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Annotated Events</div>
+      <div class="kpi-value" style="color:var(--accent-4)">5</div>
+      <div class="kpi-sub">Storm events + sensor gaps</div>
+      <div class="kpi-bar" style="background:linear-gradient(90deg,var(--accent-4),transparent)"></div>
+    </div>
+  </div>
+
+  <!-- Event filter chips -->
+  <div class="filter-row">
+    <span class="filter-label">Highlight:</span>
+    <button class="event-chip active" id="chip-all" onclick="setEvent('all')">All Year</button>
+    <button class="event-chip" style="border-color:#e74c3c;" onclick="setEvent('WinterStorm','2023-01-07','2023-01-20')">🌨 Winter Storm (Jan)</button>
+    <button class="event-chip" style="border-color:#e67e22;" onclick="setEvent('SpringSnowmelt','2023-03-05','2023-03-23')">🌊 Spring Snowmelt (Mar)</button>
+    <button class="event-chip" style="border-color:#f39c12;" onclick="setEvent('SummerLowFlow','2023-07-15','2023-08-04')">☀️ Summer Low-Flow (Jul)</button>
+    <button class="event-chip" style="border-color:#8e44ad;" onclick="setEvent('TropicalStorm','2023-08-27','2023-09-12')">🌀 Tropical Storm (Sep)</button>
+    <button class="event-chip" style="border-color:#7f8c8d;" onclick="setEvent('SensorGap','2023-05-10','2023-05-25')">⚠️ Sensor Gap (May)</button>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <span class="chart-dot" style="background:var(--accent-1);box-shadow:0 0 8px var(--accent-1)"></span>
+          Turbidity
+        </div>
+        <span class="chart-stat" id="stat-turb">FNU</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-turb"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <span class="chart-dot" style="background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)"></span>
+          pH
+        </div>
+        <span class="chart-stat" id="stat-ph">std units</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-ph"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <span class="chart-dot" style="background:var(--accent-3);box-shadow:0 0 8px var(--accent-3)"></span>
+          Specific Conductance
+        </div>
+        <span class="chart-stat" id="stat-cond">µS/cm</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-cond"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <span class="chart-dot" style="background:var(--accent-4);box-shadow:0 0 8px var(--accent-4)"></span>
+          Dissolved Oxygen
+        </div>
+        <span class="chart-stat" id="stat-do">mg/L</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-do"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Anomaly Table + Maintenance Log -->
+  <div class="bottom-grid">
+    <div>
+      <div class="section-title">Flagged Anomaly Events</div>
+      <div class="anomaly-table-wrap">
+        <div class="anomaly-table-header">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:13px;font-weight:600;">Annotated Anomalous Periods</span>
+            <span id="flag-count" style="font-size:12px;color:var(--text-muted);">Loading…</span>
+          </div>
+        </div>
+        <table class="anomaly-table" id="anomaly-tbl">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Period</th>
+              <th>Primary Sensor</th>
+              <th>Type</th>
+              <th>Time to Alarm</th>
+              <th>Z-Score F1</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>WinterStorm</strong></td>
+              <td class="z-val">Jan 12–15</td>
+              <td><span class="badge badge-red">Turbidity</span></td>
+              <td><span class="badge badge-red">Spike</span></td>
+              <td class="z-val z-med">1170 min</td>
+              <td class="z-val">F1=0.016</td>
+            </tr>
+            <tr>
+              <td><strong>SpringSnowmelt</strong></td>
+              <td class="z-val">Mar 10–18</td>
+              <td><span class="badge badge-orange">Turbidity + pH</span></td>
+              <td><span class="badge badge-orange">Drift</span></td>
+              <td class="z-val z-val">15 min</td>
+              <td class="z-val">F1=0.015</td>
+            </tr>
+            <tr>
+              <td><strong>SummerLowFlow</strong></td>
+              <td class="z-val">Jul 20–30</td>
+              <td><span class="badge badge-purple">DO + Conductance</span></td>
+              <td><span class="badge badge-orange">Gradual Drift</span></td>
+              <td class="z-val z-med">1860 min</td>
+              <td class="z-val">F1=0.055</td>
+            </tr>
+            <tr>
+              <td><strong>TropicalStorm</strong></td>
+              <td class="z-val">Sep 1–7</td>
+              <td><span class="badge badge-red">Turbidity</span></td>
+              <td><span class="badge badge-red">Spike</span></td>
+              <td class="z-val">0 min <span class="tag">instant</span></td>
+              <td class="z-val">F1=0.014</td>
+            </tr>
+            <tr>
+              <td><strong>SensorGap</strong></td>
+              <td class="z-val">May 15–20</td>
+              <td><span class="badge badge-grey">Multi-sensor</span></td>
+              <td><span class="badge badge-grey">Dropout</span></td>
+              <td class="z-val">180 min</td>
+              <td class="z-val">F1=0.006</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:20px;">
+        <div class="section-title">Detector Performance Summary</div>
+        <div class="anomaly-table-wrap">
+          <table class="anomaly-table">
+            <thead>
+              <tr><th>Detector</th><th>Precision</th><th>Recall</th><th>F1</th><th>TP</th><th>FP</th><th>FN</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Rolling Z-Score</strong> <span class="tag">selected</span></td>
+                <td class="z-val">0.061</td><td class="z-val">0.109</td>
+                <td class="z-val z-med">0.078</td>
+                <td class="z-val">334</td><td class="z-val z-high">5,165</td><td class="z-val">2,742</td>
+              </tr>
+              <tr>
+                <td><strong>Rolling IQR</strong></td>
+                <td class="z-val">0.082</td><td class="z-val">0.301</td>
+                <td class="z-val z-med">0.129</td>
+                <td class="z-val">926</td><td class="z-val z-high">10,315</td><td class="z-val">2,150</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="padding:12px 16px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);">
+            ⓘ Low F1 reflects wide manually-annotated event windows that include normal readings.
+            Spike detection is near-instant (0–15 min); gradual drift detection lags 13–31 hours.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maintenance / Event Log -->
+    <div>
+      <div class="section-title">Event & Maintenance Log</div>
+      <div class="maint-card">
+        <div class="maint-item">
+          <div class="maint-icon" style="background:rgba(231,76,60,0.15)">🌨</div>
+          <div class="maint-info">
+            <div class="maint-date">2023-01-12 → 2023-01-15</div>
+            <div class="maint-text"><strong>Winter Storm:</strong> Turbidity surged to >200 FNU. Conductance dropped sharply (dilution). pH shifted ±0.4 units. Recommend daily sensor checks during winter storm advisories.</div>
+          </div>
+        </div>
+        <div class="maint-item">
+          <div class="maint-icon" style="background:rgba(155,89,182,0.15)">⚙️</div>
+          <div class="maint-info">
+            <div class="maint-date">2023-05-15 → 2023-05-20</div>
+            <div class="maint-text"><strong>Sensor Maintenance Gap:</strong> Multi-sensor NaN dropout for 5 days. Likely cable/power fault or sonde removal for cleaning. All 4 parameters affected. Cable redundancy recommended.</div>
+          </div>
+        </div>
+        <div class="maint-item">
+          <div class="maint-icon" style="background:rgba(243,156,18,0.15)">☀️</div>
+          <div class="maint-info">
+            <div class="maint-date">2023-07-20 → 2023-07-30</div>
+            <div class="maint-text"><strong>Summer Low-Flow:</strong> DO fell below 6 mg/L. Conductance elevated (concentration effect). Algal growth suspected. Recommend weekly manual sampling during Jul–Aug.</div>
+          </div>
+        </div>
+        <div class="maint-item">
+          <div class="maint-icon" style="background:rgba(231,76,60,0.15)">🌀</div>
+          <div class="maint-info">
+            <div class="maint-date">2023-09-01 → 2023-09-07</div>
+            <div class="maint-text"><strong>Tropical Storm Remnants:</strong> Turbidity hit annual maximum (>1,270 FNU). Z-Score detector triggered instantly (0 min TTA). Sensor fouling risk — post-event sensor cleaning required.</div>
+          </div>
+        </div>
+        <div class="maint-item" style="border-bottom:none;">
+          <div class="maint-icon" style="background:rgba(46,204,113,0.15)">📊</div>
+          <div class="maint-info">
+            <div class="maint-date">Data: USGS NWIS · License: U.S. Public Domain</div>
+            <div class="maint-text">
+              <a href="https://waterservices.usgs.gov/nwis/iv/?sites=01645704&parameterCd=00095,00300,00400,63680" target="_blank" style="color:var(--accent-3)">Download live from USGS API →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>
+    Data: <a href="https://waterservices.usgs.gov/nwis/iv/" target="_blank">USGS NWIS Instantaneous Values Service</a>
+    · Station 01645704 · U.S. Public Domain · 34,677 rows · 4 parameters
+  </span>
+  <span>Built with Chart.js · Rolling Z-Score Anomaly Detection</span>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+//  DATA LOADING & CHART RENDERING
+// ════════════════════════════════════════════════════════════════════════════
+
+const SENSOR_MAP = {
+  turb: { col: 'turbidity_FNU',              color: '#e74c3c', label: 'Turbidity (FNU)',        statId: 'stat-turb', chartId: 'chart-turb' },
+  ph:   { col: 'pH',                          color: '#2ecc71', label: 'pH (std units)',          statId: 'stat-ph',   chartId: 'chart-ph'   },
+  cond: { col: 'specific_conductance_uScm',   color: '#3498db', label: 'Spec. Conductance (µS)', statId: 'stat-cond', chartId: 'chart-cond' },
+  do:   { col: 'dissolved_oxygen_mgL',        color: '#9b59b6', label: 'Dissolved O₂ (mg/L)',    statId: 'stat-do',   chartId: 'chart-do'   },
+};
+
+const EVENTS = [
+  { id:'WinterStorm',    start:'2023-01-12', end:'2023-01-15', color:'rgba(231,76,60,0.15)',   label:'Winter Storm' },
+  { id:'SpringSnowmelt', start:'2023-03-10', end:'2023-03-18', color:'rgba(230,126,34,0.15)',  label:'Spring Snowmelt' },
+  { id:'SummerLowFlow',  start:'2023-07-20', end:'2023-07-30', color:'rgba(243,156,18,0.15)',  label:'Summer Low-Flow' },
+  { id:'TropicalStorm',  start:'2023-09-01', end:'2023-09-07', color:'rgba(142,68,173,0.15)', label:'Tropical Storm' },
+  { id:'SensorGap',      start:'2023-05-15', end:'2023-05-20', color:'rgba(127,140,141,0.15)','label':'Sensor Gap' },
+];
+
+let allData = [];
+let charts  = {};
+let currentStart = null, currentEnd = null;
+
+// ── CSV loader (handles both local file and fallback) ─────────────────────
+async function loadCSV() {
+  return new Promise((resolve, reject) => {
+    Papa.parse('data/processed/sensor_data_processed.csv', {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      complete: r => resolve(r.data),
+      error: err => reject(err),
+    });
+  });
+}
+
+// ── Downsample: keep 1 in N rows for performance ──────────────────────────
+function downsample(data, n=6) {
+  return data.filter((_, i) => i % n === 0);
+}
+
+function inRange(row, start, end) {
+  if (!start) return true;
+  const ts = new Date(row.timestamp);
+  return ts >= new Date(start) && ts <= new Date(end);
+}
+
+// ── Build chart annotation boxes ──────────────────────────────────────────
+function buildAnnotations(startFilter, endFilter) {
+  if (startFilter) return [];   // zoomed view – no overlays
+  return EVENTS.map(ev => ({
+    type: 'box',
+    xMin: ev.start + 'T00:00:00',
+    xMax: ev.end   + 'T23:59:00',
+    backgroundColor: ev.color,
+    borderWidth: 0,
+    label: { display: false },
+  }));
+}
+
+// ── Render a single chart ─────────────────────────────────────────────────
+function renderChart(key, data) {
+  const cfg = SENSOR_MAP[key];
+  const ctx = document.getElementById(cfg.chartId).getContext('2d');
+
+  const pts = data.map(r => ({ x: r.timestamp, y: r[cfg.col] }));
+  const anomPts = data.filter(r => r['zscore_flag_any'] === 1).map(r => ({ x: r.timestamp, y: r[cfg.col] }));
+
+  const vals = data.map(r => r[cfg.col]).filter(v => v != null && !isNaN(v));
+  const mn = Math.min(...vals).toFixed(2), mx = Math.max(...vals).toFixed(2);
+  document.getElementById(cfg.statId).textContent = `min ${mn}  max ${mx}`;
+
+  if (charts[key]) { charts[key].destroy(); }
+
+  charts[key] = new Chart(ctx, {
+    data: {
+      datasets: [
+        {
+          type: 'line',
+          label: cfg.label,
+          data: pts,
+          borderColor: cfg.color,
+          borderWidth: 1.2,
+          pointRadius: 0,
+          tension: 0.2,
+          fill: false,
+        },
+        {
+          type: 'scatter',
+          label: 'Anomaly flagged',
+          data: anomPts,
+          backgroundColor: 'rgba(231,76,60,0.7)',
+          pointRadius: 2.5,
+          pointHoverRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2236',
+          borderColor: '#2d3a52',
+          borderWidth: 1,
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          callbacks: {
+            title: items => new Date(items[0].raw.x).toLocaleString('en-US',
+              { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }),
+            label: item => `${item.dataset.label}: ${item.raw.y?.toFixed(2) ?? 'N/A'}`,
+          }
+        },
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: currentStart ? 'day' : 'month', displayFormats: { month:'MMM', day:'MMM d' } },
+          ticks: { color:'#64748b', maxTicksLimit: 12 },
+          grid:  { color:'rgba(45,58,82,0.4)' },
+        },
+        y: {
+          ticks: { color:'#64748b' },
+          grid:  { color:'rgba(45,58,82,0.4)' },
+        },
+      },
+    },
+  });
+}
+
+// ── Update KPIs ───────────────────────────────────────────────────────────
+function updateKPIs(data) {
+  const total = data.length;
+  const flagged = data.filter(r => r['zscore_flag_any'] === 1).length;
+  const pct = (flagged / total * 100).toFixed(1);
+  const turbVals = data.map(r => r['turbidity_FNU']).filter(v => v != null && !isNaN(v));
+  const phVals   = data.map(r => r['pH']).filter(v => v != null && !isNaN(v));
+  const turbMax  = Math.max(...turbVals).toFixed(0);
+  const phMin    = Math.min(...phVals).toFixed(2);
+  const phMax    = Math.max(...phVals).toFixed(2);
+
+  document.getElementById('kpi-total').textContent    = total.toLocaleString();
+  document.getElementById('kpi-pct').textContent      = pct + '%';
+  document.getElementById('kpi-turb-peak').textContent= turbMax;
+  document.getElementById('kpi-ph-range').textContent = `${phMin}–${phMax}`;
+  document.getElementById('flag-count').textContent   = `${flagged.toLocaleString()} flagged readings`;
+}
+
+// ── Main render ───────────────────────────────────────────────────────────
+function render(start, end) {
+  currentStart = start || null;
+  currentEnd   = end   || null;
+
+  const filtered = start
+    ? allData.filter(r => inRange(r, start, end))
+    : allData;
+  const ds = downsample(filtered, start ? 1 : 6);
+
+  Object.keys(SENSOR_MAP).forEach(k => renderChart(k, ds));
+  updateKPIs(filtered);
+}
+
+// ── Event chip handler ────────────────────────────────────────────────────
+function setEvent(id, start, end) {
+  document.querySelectorAll('.event-chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('chip-all').classList.toggle('active', id === 'all');
+  if (id !== 'all') {
+    const chip = [...document.querySelectorAll('.event-chip')].find(c => c.onclick?.toString().includes(id));
+    if (chip) chip.classList.add('active');
+  }
+  render(start, end);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    allData = await loadCSV();
+    allData = allData.filter(r => r && r.timestamp);
+    document.getElementById('loading').style.display = 'none';
+    render(null, null);
+  } catch(e) {
+    console.error('CSV load failed:', e);
+    document.querySelector('.load-text').textContent = '⚠ Could not load CSV. Open via a local server or place CSV in data/processed/';
+  }
+})();
+</script>
+</body>
+</html>
