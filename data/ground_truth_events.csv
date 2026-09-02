@@ -1,0 +1,6 @@
+event_id,type,start_day,end_day,start_idx,end_idx,sensors,description
+E1,sudden_spike,10,10.5,960,1008,pH,Sudden acid dump – pH drops ~1.8 units in 30 min
+E2,gradual_drift,25,35.0,2400,3360,turbidity_NTU,Filter wear – turbidity drifts from ~2.5 to ~9 NTU over 10 days
+E3,sensor_dropout,48,49.0,4608,4704,CO2_ppm,CO2 sensor dropout – 24 h of NaN readings
+E4,spike_and_drift,62,68.0,5952,6528,"pH, turbidity_NTU",Industrial discharge – oscillating pH + rising turbidity
+E5,gradual_drift,80,90.0,7680,8640,CO2_ppm,CO2 sensor aging – baseline drifts +45 ppm over 10 days

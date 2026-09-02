@@ -1,0 +1,6 @@
+event_id,event_type,tta_samples,tta_minutes
+E1,sudden_spike,14.0,210.0
+E2,gradual_drift,339.0,5085.0
+E3,sensor_dropout,0.0,0.0
+E4,spike_and_drift,12.0,180.0
+E5,gradual_drift,,

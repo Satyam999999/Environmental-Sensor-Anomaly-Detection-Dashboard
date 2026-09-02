@@ -1,8 +1,8 @@
 # Environmental Sensor Anomaly Detection & Dashboard
 
-Real water-quality anomaly detection using live USGS sensor data from the Potomac River at Chain Bridge, DC. Includes EDA, rolling Z-score & IQR detectors with precision/recall evaluation, an interactive HTML dashboard, and a written analysis report.
+Real water-quality anomaly detection using live USGS sensor data from the Potomac River at Chain Bridge, DC. Includes EDA, rolling Z-score & IQR detectors with precision/recall evaluation, an interactive Power BI dashboard, and a written analysis report.
 
-![Dashboard Preview](image.png)
+![Dashboard Preview](DASHBOARD.jpeg)
 
 ---
 
@@ -37,7 +37,7 @@ Real water-quality anomaly detection using live USGS sensor data from the Potoma
 ├── anomaly_detection.py                    # Rolling Z-Score + IQR detectors + evaluation
 ├── generate_notebook.py                    # Generate the Jupyter notebook
 ├── analysis_notebook.ipynb                 # EDA notebook (8 sections, 10+ charts)
-├── dashboard.html                          # Interactive HTML dashboard (Power BI equivalent)
+├── Sensor_Anomaly_Dashboard.pbix           # Interactive Power BI dashboard
 ├── report.md                               # Full written report
 ├── data/
 │   ├── raw/
@@ -87,11 +87,7 @@ jupyter notebook analysis_notebook.ipynb
 
 ### 5. Open the dashboard
 
-```bash
-# Serve locally so the CSV loads correctly:
-python3 -m http.server 8000
-# Then open: http://localhost:8000/dashboard.html
-```
+Open `Sensor_Anomaly_Dashboard.pbix` in Power BI Desktop to interact with the dashboard.
 
 ---
 

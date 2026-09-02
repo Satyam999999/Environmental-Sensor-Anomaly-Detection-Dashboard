@@ -1,0 +1,4 @@
+detector,TP,FP,FN,precision,recall,F1
+RollingZScore,123,39,2517,0.7593,0.0466,0.0878
+RollingIQR,184,90,2456,0.6715,0.0697,0.1263
+AlarmFlag,631,12,2009,0.9813,0.239,0.3844

@@ -1,0 +1,11 @@
+event_id,event_type,detector,TP,FP,FN,precision,recall,F1
+E1,sudden_spike,RollingZScore,15,147,33,0.0926,0.3125,0.1429
+E2,gradual_drift,RollingZScore,6,156,954,0.037,0.0062,0.0107
+E3,sensor_dropout,RollingZScore,96,66,0,0.5926,1.0,0.7442
+E4,spike_and_drift,RollingZScore,6,156,570,0.037,0.0104,0.0163
+E5,gradual_drift,RollingZScore,0,162,960,0.0,0.0,0.0
+E1,sudden_spike,RollingIQR,29,245,19,0.1058,0.6042,0.1801
+E2,gradual_drift,RollingIQR,27,247,933,0.0985,0.0281,0.0438
+E3,sensor_dropout,RollingIQR,96,178,0,0.3504,1.0,0.5189
+E4,spike_and_drift,RollingIQR,32,242,544,0.1168,0.0556,0.0753
+E5,gradual_drift,RollingIQR,0,274,960,0.0,0.0,0.0
